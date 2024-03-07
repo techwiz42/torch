@@ -10,6 +10,11 @@ from torch import nn
 
 RANDOM_SEED = 42
 
+# For tracking performance
+epoch_count = []
+loss_values = []
+test_loss_values = []
+
 def create_dataset():
     """
 	creates a set of 50 points and splits it 
@@ -101,13 +106,13 @@ def main():
     optimizer = torch.optim.SGD(params=model_0.parameters(), lr=0.01)
 
     # Tracking experiments
-    epoch_count = []
-    loss_values = []
-    test_loss_values = []
+    #epoch_count = []
+    #loss_values = []
+    #test_loss_values = []
 
     # An epoch is one loop through the data
     epochs = 200
-    # Set up training loop - steps 0 - 5 are the guts of pytorch ML 
+    # Set up training loop - steps 0 - 5 are the guts of pytorch M
     for epoch in range(epochs):
         epoch_count.append(epoch)
         # 0. Set model to training mode
@@ -136,24 +141,22 @@ def main():
 
 
     # Plot predicted vs actual
-    prediction_job = Process(
+    Process(
             target=plot_predictions,
             kwargs={"train_data":x_train,
                     "train_labels":y_train,
                     "test_data":x_test,
                     "test_labels":y_test,
                     "predictions":y_preds}
-            )
-    prediction_job.start()
+            ).start()
 
     # Plot loss vs test loss
-    loss_job = Process(
+    Process(
             target=plot_loss_values,
             kwargs={"epochs":epoch_count,
                     "loss": loss_values,
                     "test_loss": test_loss_values}
-            )
-    loss_job.start()
+            ).start()
 
 if __name__ == "__main__":
     main()
