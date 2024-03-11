@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 # import sklearn
 from sklearn.datasets import make_circles
 from sklearn.model_selection import train_test_split as tts
-import requests
-from pathlib import Path
 # import pandas as pd
 import torch
 from torch import nn
@@ -39,6 +37,7 @@ def condition_and_split_data(x_samp, y_samp):
 
 def plot_data(x_samp, y_samp):
     """ plot data in a separate process """
+    plt.title("Visualization of Raw Data")
     plt.scatter(x=x_samp[:,0],
                 y=x_samp[:,1],
                 c=y_samp,
@@ -52,6 +51,8 @@ def accuracy_fn(y_true, y_pred):
     return acc
 
 def main():
+    # pylint: disable-msg=too-many-locals
+    # pylint: disable-msg=not-callable
     """ main entry point for script """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     x_samples, y_samples = create_data()
@@ -61,7 +62,6 @@ def main():
                     "y_samp": y_samples}).start()
     x_train, x_test, y_train, y_test = condition_and_split_data(x_samples,
                                                                 y_samples)
-    # model_0 = CircleModel().to(device)
     model_0 = Sequential(
         nn.Linear(in_features=2, out_features=128),
         nn.ReLU(),
@@ -78,7 +78,7 @@ def main():
     model_0.eval()
     torch.manual_seed(RANDOM_STATE)
     torch.cuda.manual_seed(RANDOM_STATE)
-    epochs = 100
+    epochs = 10
     x_test = x_test.to(device)
     y_test = y_test.to(device)
     x_train = x_train.to(device)
@@ -115,9 +115,15 @@ def main():
             if epoch % 10 == 0:
                 print(f"epoch {epoch}, loss: {loss:.5f}  acc: {acc:.2f}%, \
 test_loss: {test_loss:.2f}, test_acc: {test_acc:.2f}%")
-    show_boundary(model_0, x_train, x_test, y_train, y_test)
-    
+    Process(target=show_boundary,
+            kwargs={"model": model_0.to("cpu"),
+                    "x_train": x_train.to("cpu"),
+                    "x_test": x_test.to("cpu"), 
+                    "y_train": y_train.to("cpu"),
+                    "y_test": y_test.to("cpu")}).start()
+
 def show_boundary(model, x_train, x_test, y_train, y_test):
+    """ plot the 'decision boundary' for test and train data """
     plt.figure(figsize=(12,6))
     plt.subplot(1, 2, 1)
     plt.title("Train")
