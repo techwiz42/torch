@@ -14,6 +14,10 @@ NUM_FEATURES = 2
 NUM_SAMPLES = 1000
 RANDOM_STATE = 42
 
+LOSS_FN = nn.CrossEntropyLoss()
+ACTIVATION_FN = torch.softmax
+OPTIMIZER = torch.optim.SGD
+
 class BlobModel(nn.Module):
     """ multi-layered model for multi class characterization """
     def __init__(self, input_features, output_features, hidden_units=8):
@@ -72,6 +76,32 @@ def accuracy_fn(y_true, y_pred):
     acc = (correct/len(y_pred)) * 100
     return acc
 
+def train_model(epochs, model, x_train, x_test, y_train, y_test):
+    # pylint: disable-msg=too-many-arguments
+    # pylint: disable-msg=too-many-locals
+    """ Your one-stop-shopping model training method """
+    optimizer = OPTIMIZER(params = model.parameters(), lr = 0.1)
+    for epoch in range(epochs):
+        model.train()
+        y_logits = model(x_train)
+        y_pred = ACTIVATION_FN(y_logits, dim=1).argmax(dim=1)
+        loss = LOSS_FN(y_logits, y_train)
+        acc = accuracy_fn(y_true=y_train, y_pred=y_pred)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        model.eval()
+        with torch.inference_mode():
+            test_logits = model(x_test)
+            test_preds = ACTIVATION_FN(test_logits, dim=1).argmax(dim=1)
+            test_loss = LOSS_FN(test_logits, y_test)
+            test_acc = accuracy_fn(y_true = y_test, y_pred=test_preds)
+            if epoch % 10 == 0:
+                print(f"{epoch=}, loss: {loss:4f}, acc: {acc:2f}%, \
+test_loss: {test_loss:4f}, test_acc: {test_acc:2f}%")
+
+
 def plot_results(model, x_blob_train, y_blob_train, x_blob_test, y_blob_test):
     """ plot train and test results """
     plt.figure(figsize=(10, 7))
@@ -99,13 +129,6 @@ def main():
                       output_features=4,
                       hidden_units=256).to(device)
 
-    # Loss function
-    loss_fn = nn.CrossEntropyLoss()
-
-    # Create optimizer
-    optimizer = torch.optim.SGD(params=model.parameters(),
-                                lr = 0.1)
-
 
     torch.manual_seed(RANDOM_STATE)
     torch.cuda.manual_seed(RANDOM_STATE)
@@ -114,35 +137,13 @@ def main():
     x_blob_train, x_blob_test = x_blob_train.to(device), x_blob_test.to(device)
     y_blob_train, y_blob_test = y_blob_train.to(device), y_blob_test.to(device)
 
-    for epoch in range(epochs):
-        model.train()
-
-        y_logits = model(x_blob_train)
-        y_pred = torch.softmax(y_logits, dim=1).argmax(dim=1)
-
-        loss = loss_fn(y_logits, y_blob_train)
-        acc = accuracy_fn(y_true=y_blob_train,
-                          y_pred=y_pred)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        model.eval()
-        with torch.inference_mode():
-            test_logits = model(x_blob_test)
-            #test_preds = torch.softmax(test_logits, dim=1).argmax(dim=1)
-
-            test_loss = loss_fn(test_logits, y_blob_test)
-            test_acc = accuracy_fn(y_true = y_blob_train,
-                                   y_pred = y_pred)
-        if epoch % 10 == 0:
-            print(f"{epoch=}, loss {loss:4f}, acc {acc:2f}, test_loss\
- {test_loss:4f}%, test_acc {test_acc:2f}%")
-
-    #model.eval()
-    #with torch.inference_mode():
-        #logits = model(x_blob_test)
-    #y_preds = torch.softmax(logits, dim=1).argmax(dim=1)
+    train_model(epochs,
+                model,
+                x_blob_train,
+                x_blob_test,
+                y_blob_train,
+                y_blob_test
+               )
     Process(target=plot_results,
             kwargs={"model": model.to("cpu"),
                     "x_blob_train": x_blob_train.to("cpu"),
