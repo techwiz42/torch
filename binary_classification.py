@@ -13,6 +13,17 @@ import helper_functions as hfns
 N_SAMPLES = 1000
 RANDOM_STATE = 42
 
+class CircleModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer_1 = nn.Linear(in_features=2, out_features=128)
+        self.layer_2 = nn.Linear(in_features=128, out_features=256)
+        self.layer_3 = nn.Linear(in_features=256, out_features=1)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        return self.layer_3(self.relu(self.layer_2(self.relu(self.layer_1(x)))))
+
 def create_data():
     """ 
     create a toy dataset consisting of two sets of points
@@ -62,6 +73,7 @@ def main():
                     "y_samp": y_samples}).start()
     x_train, x_test, y_train, y_test = condition_and_split_data(x_samples,
                                                                 y_samples)
+    """
     model_0 = Sequential(
         nn.Linear(in_features=2, out_features=128),
         nn.ReLU(),
@@ -70,7 +82,9 @@ def main():
         nn.Linear(in_features=256, out_features=128),
         nn.ReLU(),
         nn.Linear(in_features=128, out_features=1)).to(device)
-    # Setup loss fn
+    """
+    model_0 = CircleModel().to(device)
+    # Setup loss fn BCE stands for "BINARY CROSS ENTROPY"
     loss_fn = nn.BCEWithLogitsLoss()
     # Setup optimizer
     optimizer = torch.optim.Adam(params=model_0.parameters(),
@@ -78,7 +92,7 @@ def main():
     model_0.eval()
     torch.manual_seed(RANDOM_STATE)
     torch.cuda.manual_seed(RANDOM_STATE)
-    epochs = 10
+    epochs = 100
     x_test = x_test.to(device)
     y_test = y_test.to(device)
     x_train = x_train.to(device)
