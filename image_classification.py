@@ -85,6 +85,27 @@ def print_train_time(start: float,
   total_time = end - start
   print(f"train time on {device=}: {total_time:3f} seconds")
 
+def eval_model(model: torch.nn.Module,
+               data_loader: torch.utils.data.DataLoader,
+               loss_fn: torch.nn.Module,
+               accuracy_fn) -> dict:
+  loss, acc = 0, 0
+  model.eval()
+  with torch.inference_mode():
+    for x, y in data_loader:
+      # Make predictions
+      y_pred = model(x)
+      # Accumulate the loss and accuracy per batch
+      loss += loss_fn(y_pred, y)
+      acc += accuracy_fn(y_true = y,
+                         y_pred = y_pred.argmax(dim=1))
+    # Scale loss and acc to find average loss/accuracy per batch
+    loss /= len(data_loader)
+    acc /= len(data_loader)
+  return {"model_name": model.__class__.__name__,
+          "model_loss": loss.item(),
+          "model_acc": acc}      
+
 def main():
   train_data, test_data = get_data()
   (image, label) = train_data[0]
@@ -126,31 +147,23 @@ def main():
       #5 optimizer step
       optimizer.step()
       if batch % 400 == 0:
-        print(f"Looked at (batch * len(x)/{len(train_dataloader.dataset)} samples")
+        print(f"Looked at {batch * len(x)/len(train_dataloader.dataset):2f}% of samples")
     # divide total train loss by length of train dataloader
     train_loss /= len(train_dataloader)
 
     #### Testing
-    test_loss, test_acc = 0, 0
-    #put model in evaluation mode
-    model0.eval()
-    with torch.inference_mode():
-      for x_test, y_test in test_dataloader: # x is data, y is labels
-        #1. forward pass
-        test_pred = model0(x_test)
-        #2. calculate loss
-        test_loss += LOSS_FN(test_pred, y_test)
-        #3. calculate accuracy
-        test_acc += accuracy_fn(y_true = y_test, y_pred = test_pred.argmax(dim=1))
-      # calculate test loss ave per batch
-      test_loss /= len(test_dataloader)
-      test_acc /= len(test_dataloader)
-
-    print(f"Traain loss: {train_loss:4}, test loss {test_loss:4f}, test acc: {test_acc:4f}")
+    test_rslts = eval_model(model0,
+                            test_dataloader,
+                            LOSS_FN,
+                            accuracy_fn)
+    model_name = test_rslts.get("model_name")
+    test_loss = test_rslts.get("model_loss")
+    test_acc = test_rslts.get("model_acc")
+    print(f"{model_name=}, Traain loss: {train_loss:4}, test loss {test_loss:4f}, test acc: {test_acc:4f}")
   train_time_end_on_cpu = timer()
   total_train_time_model_0 = print_train_time(start=train_time_start_on_cpu,
                                               end = train_time_end_on_cpu,
-                                              device=(next(model0.parameters())))    
+                                              device=(next(model0.parameters()).device))    
         
 
 
