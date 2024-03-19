@@ -51,6 +51,55 @@ class FashionMNISTV1(nn.Module):
   def forward(self, x: torch.Tensor):
     return self.layer_stack(x)
 
+class FashionMNISTV2(nn.Module):
+  def __init__(self,
+               input_shape: int,
+               hidden_units: int,
+               output_shape: int):
+    super().__init__()
+    self.conv_block_1 = nn.Sequential(
+      nn.Conv2d(in_channels=input_shape,
+                out_channels=hidden_units,
+                kernel_size=3,
+                stride=1,
+                padding=1),
+      nn.ReLU(),
+      nn.Conv2d(in_channels=hidden_units,
+                out_channels=hidden_units,
+                kernel_size=3,
+                stride=1,
+                padding=1),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=2)
+    )
+    self.conv_block_2 = nn.Sequential(
+      nn.Conv2d(in_channels=hidden_units,
+                out_channels=hidden_units,
+                kernel_size=3,
+                stride=1,
+                padding=1),
+      nn.ReLU(),
+      nn.Conv2d(in_channels=hidden_units,
+                out_channels=hidden_units,
+                kernel_size=3,
+                stride=1,
+                padding=1),
+      nn.ReLU(),
+      nn.MaxPool2d(kernel_size=2)
+    )
+    self.classifier = nn.Sequential(
+      nn.Flatten(),
+      nn.Linear(in_features=hidden_units*7*7,
+                out_features=output_shape)
+    )
+
+  def forward(self, x):
+    x = self.conv_block_1(x)
+    x = self.conv_block_2(x)
+    x = self.classifier(x)
+    return x
+
+                    
 def get_data():
   """ Get data from FashionMNIST dataset """
   train_data = datasets.FashionMNIST(
@@ -105,25 +154,31 @@ def print_train_time(start: float,
 def train_model(model: torch.nn.Module,
                 data_loader: torch.utils.data.DataLoader,
                 loss_fn: torch.nn.Module,
+                accuracy_fn,
                 optimizer: torch.optim.Optimizer) -> float:
   train_loss = 0
+  train_acc = 0
   model.train()
   for batch, (x, y) in enumerate(data_loader):
     x = x.to(DEVICE)
     y = y.to(DEVICE)
     # 1. Forward pass
     y_pred = model(x)
-    # 2. Calculate loss
+    # 2. Calculate loss, accuracys
     loss = loss_fn(y_pred, y)
     train_loss += loss
+    train_acc += accuracy_fn(y_true = y,
+                             y_pred = y_pred.argmax(dim=1))
     # 3. Optimize
     optimizer.zero_grad()
     # 4. back-propagate the loss
     loss.backward()
     # 5. optimizer step
     optimizer.step()
+  train_acc /= len(data_loader)
   train_loss /= len(data_loader)
-  return train_loss
+  print(f"train_loss: {train_loss:.5f} train_acc: {train_acc:.2f}%")
+  return train_loss 
 
 def eval_model(model: torch.nn.Module,
                data_loader: torch.utils.data.DataLoader,
@@ -144,6 +199,7 @@ def eval_model(model: torch.nn.Module,
     # Scale loss and acc to find average loss/accuracy per batch
     loss /= len(data_loader)
     acc /= len(data_loader)
+    print(f"test_loss: {loss:.5f} test_acc: {acc:.2f}%")
   return {"model_name": model.__class__.__name__,
           "model_loss": loss.item(),
           "model_acc": acc}      
@@ -168,7 +224,10 @@ def main():
   model1 = FashionMNISTV1(input_shape = 784,
                           output_shape = 10,
                           hidden_units = len(class_names)).to(DEVICE)
-  model = model1
+  model2 = FashionMNISTV2(input_shape=1,
+                          hidden_units = 10,
+                          output_shape=len(class_names)).to(DEVICE)
+  model = model2
   loss_fn = nn.CrossEntropyLoss()
   optimizer = torch.optim.SGD(params=model.parameters(),
                               lr = LEARNING_RATE)
@@ -182,6 +241,7 @@ def main():
     train_loss  = train_model(model,
                               train_dataloader,
                               loss_fn,
+                              accuracy_fn,
                               optimizer)
     #### Testing
     test_rslts = eval_model(model,
@@ -191,7 +251,7 @@ def main():
     model_name = test_rslts.get("model_name")
     test_loss = test_rslts.get("model_loss")
     test_acc = test_rslts.get("model_acc")
-    print(f"{model_name=}, Train loss: {train_loss:4}, test loss {test_loss:4f}, test acc: {test_acc:4f}")
+    #print(f"{model_name=}, Train loss: {train_loss:4}, test loss {test_loss:4f}, test acc: {test_acc:4f}")
   train_time_end = timer()
   total_train_time = print_train_time(start=train_time_start,
                                       end = train_time_end,
