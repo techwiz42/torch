@@ -14,8 +14,7 @@ BATCH_SIZE = 32
 RANDOM_SEED = 42
 LEARNING_RATE = 0.1
 
-LOSS_FN = nn.CrossEntropyLoss()
-OPTIMIZER = torch.optim.SGD
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class FashionMNISTV0(nn.Module):
   def __init__(self, 
@@ -32,6 +31,24 @@ class FashionMNISTV0(nn.Module):
         )
   
   def forward(self, x):
+    return self.layer_stack(x)
+
+class FashionMNISTV1(nn.Module):
+  def __init__(self,
+               input_shape: int,
+               hidden_units: int,
+               output_shape: int):
+      super().__init__()
+      self.layer_stack = nn.Sequential(
+        nn.Flatten(),
+        nn.Linear(in_features = input_shape,
+                  out_features = hidden_units),
+        nn.ReLU(),
+        nn.Linear(in_features = hidden_units,
+                  out_features = output_shape),
+        nn.ReLU()
+      )
+  def forward(self, x: torch.Tensor):
     return self.layer_stack(x)
 
 def get_data():
@@ -85,6 +102,29 @@ def print_train_time(start: float,
   total_time = end - start
   print(f"train time on {device=}: {total_time:3f} seconds")
 
+def train_model(model: torch.nn.Module,
+                data_loader: torch.utils.data.DataLoader,
+                loss_fn: torch.nn.Module,
+                optimizer: torch.optim.Optimizer) -> float:
+  train_loss = 0
+  model.train()
+  for batch, (x, y) in enumerate(data_loader):
+    x = x.to(DEVICE)
+    y = y.to(DEVICE)
+    # 1. Forward pass
+    y_pred = model(x)
+    # 2. Calculate loss
+    loss = loss_fn(y_pred, y)
+    train_loss += loss
+    # 3. Optimize
+    optimizer.zero_grad()
+    # 4. back-propagate the loss
+    loss.backward()
+    # 5. optimizer step
+    optimizer.step()
+  train_loss /= len(data_loader)
+  return train_loss
+
 def eval_model(model: torch.nn.Module,
                data_loader: torch.utils.data.DataLoader,
                loss_fn: torch.nn.Module,
@@ -93,6 +133,8 @@ def eval_model(model: torch.nn.Module,
   model.eval()
   with torch.inference_mode():
     for x, y in data_loader:
+      x = x.to(DEVICE)
+      y = y.to(DEVICE)
       # Make predictions
       y_pred = model(x)
       # Accumulate the loss and accuracy per batch
@@ -122,48 +164,38 @@ def main():
                     "class_names": class_names}).start()
   model0 = FashionMNISTV0(input_shape = 784, # 28 * 28 = 784
                           output_shape = 10,
-                          hidden_units = 10)
-  optimizer = OPTIMIZER(params=model0.parameters(),
-                        lr = LEARNING_RATE)
+                          hidden_units = 10).to(DEVICE)
+  model1 = FashionMNISTV1(input_shape = 784,
+                          output_shape = 10,
+                          hidden_units = len(class_names)).to(DEVICE)
+  model = model1
+  loss_fn = nn.CrossEntropyLoss()
+  optimizer = torch.optim.SGD(params=model.parameters(),
+                              lr = LEARNING_RATE)
 
   torch.manual_seed(RANDOM_SEED)
-  train_time_start_on_cpu = timer()
+  train_time_start = timer()
   epochs = 3
-
   for epoch in tqdm(range(epochs)):
-    train_loss = 0
-    print(f"epoch {epoch} --------------")
-    for batch, (x, y) in enumerate(train_dataloader): # x is data, y is labels
-      model0.train() # Put model into training mode
-      #1 forward pass
-      y_pred = model0(x)
-      #2 calculate loss
-      loss = LOSS_FN(y_pred, y)
-      train_loss+= loss
-      #3 Optimize
-      optimizer.zero_grad()
-      #4 loss backward
-      loss.backward()
-      #5 optimizer step
-      optimizer.step()
-      if batch % 400 == 0:
-        print(f"Looked at {batch * len(x)/len(train_dataloader.dataset):2f}% of samples")
-    # divide total train loss by length of train dataloader
-    train_loss /= len(train_dataloader)
-
+    print(f"{epoch=} -----------------------------")
+    #### Training
+    train_loss  = train_model(model,
+                              train_dataloader,
+                              loss_fn,
+                              optimizer)
     #### Testing
-    test_rslts = eval_model(model0,
+    test_rslts = eval_model(model,
                             test_dataloader,
-                            LOSS_FN,
+                            loss_fn,
                             accuracy_fn)
     model_name = test_rslts.get("model_name")
     test_loss = test_rslts.get("model_loss")
     test_acc = test_rslts.get("model_acc")
-    print(f"{model_name=}, Traain loss: {train_loss:4}, test loss {test_loss:4f}, test acc: {test_acc:4f}")
-  train_time_end_on_cpu = timer()
-  total_train_time_model_0 = print_train_time(start=train_time_start_on_cpu,
-                                              end = train_time_end_on_cpu,
-                                              device=(next(model0.parameters()).device))    
+    print(f"{model_name=}, Train loss: {train_loss:4}, test loss {test_loss:4f}, test acc: {test_acc:4f}")
+  train_time_end = timer()
+  total_train_time = print_train_time(start=train_time_start,
+                                      end = train_time_end,
+                                      device=DEVICE)    
         
 
 
