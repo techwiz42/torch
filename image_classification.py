@@ -1,5 +1,6 @@
 """ Experimenting with image classifiers """
 from timeit import default_timer as timer
+import pandas as pd
 from tqdm.auto import tqdm
 from torchvision import datasets
 from torchvision.transforms import ToTensor
@@ -202,36 +203,42 @@ def main():
                             output_shape = 10,
                             hidden_units = 10).to(DEVICE)
     model1 = FashionMNISTV1(input_shape = 784,
-                            output_shape = 10,
-                            hidden_units = len(class_names)).to(DEVICE)
+                            output_shape = len(class_names),
+                            hidden_units = 10).to(DEVICE)
     model2 = FashionMNISTV2(input_shape=1,
                             hidden_units = 10,
                             output_shape=len(class_names)).to(DEVICE)
-    model = model2
+    models = [model0, model1, model2]
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(params=model.parameters(),
-                                lr = LEARNING_RATE)
-
-    torch.manual_seed(RANDOM_SEED)
-    train_time_start = timer()
-    epochs = 3
-    for epoch in tqdm(range(epochs)):
-        print(f"{epoch=} -----------------------------")
-        #### Training
-        train_model(model,
-                    train_dataloader,
-                    loss_fn,
-                    accuracy_fn,
-                    optimizer)
-        #### Testing
-        eval_model(model,
-                   test_dataloader,
-                   loss_fn,
-                   accuracy_fn)
-    train_time_end = timer()
-    print_train_time(start=train_time_start,
-                     end = train_time_end,
-                     device=DEVICE)
+    results = []
+    for model in models:
+        optimizer = torch.optim.SGD(params=model.parameters(),
+                                    lr = LEARNING_RATE)
+        torch.cuda.manual_seed(RANDOM_SEED)
+        train_time_start = timer()
+        epochs = 3
+        result = None
+        for epoch in tqdm(range(epochs)):
+            print(f"{epoch=} -----------------------------")
+            #### Training
+            train_model(model,
+                        train_dataloader,
+                        loss_fn,
+                        accuracy_fn,
+                        optimizer)
+            #### Testing
+            result = eval_model(model,
+                                test_dataloader,
+                                loss_fn,
+                                accuracy_fn)
+        train_time_end = timer()
+        print_train_time(start=train_time_start,
+                         end = train_time_end,
+                         device=DEVICE)
+        result.update({"train time": train_time_end - train_time_start})
+        results.append(result)
+    compare_results = pd.DataFrame(results)
+    print(compare_results)
 
 if __name__ == "__main__":
     main()
